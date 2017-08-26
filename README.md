@@ -4,6 +4,7 @@
 ## 主要功能
 1. 扫描工程中的代码，生成同等数量的 Category 文件，文件中及是同等方法数量的垃圾代码，垃圾代码方法名随机。
 1. 修改 xxx.xcassets 文件夹中的 png 资源文件名。
+1. 删除代码中的所有注释和空行。
 
 ## 使用
 1. 下载源码。
@@ -15,6 +16,7 @@
 - **工程源文件目录**（如：`/Users/kelei/Documents/work/git/projectName/source`）
 - **-spamCodeOut** 后面跟垃圾代码输出目录（如：`-spamCodeOut /Users/kelei/Desktop/GSCCategory`）
 - **-handleXcassets** 修改`xxx.xcassets`文件夹中的 png 资源文件名，同时也`Contents.json`文件中的关联名称，不会影响代码中使用图片。
+- **-deleteComments** 删除工程目录下 .h .m 文件中的注释和空行。
 
 ## 已知问题
 - 生成的垃圾代码文件可能是 .m 文件中实现的私有类，编译垃圾代码可能会报错，删除该垃圾代码 .h .m 文件及可。

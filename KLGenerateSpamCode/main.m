@@ -17,7 +17,8 @@ typedef NS_ENUM(NSInteger, GSCSourceType) {
 void recursiveDirectory(NSString *directory, void(^handleFile)(NSString *mFilePath));
 void generateSpamCodeFile(NSString *outDirectory, NSString *mFilePath, GSCSourceType type);
 NSString *randomString(NSInteger length);
-void handleXcassetsFiels(NSString *directory);
+void handleXcassetsFiles(NSString *directory);
+void deleteComments(NSString *directory);
 
 // 命令行修改工程目录下所有 png 资源 hash 值
 // 使用 ImageMagick 进行图片压缩，所以需要安装 ImageMagick，安装方法 brew install imagemagick
@@ -33,7 +34,7 @@ int main(int argc, const char * argv[]) {
             return 1;
         }
         if (arguments.count <= 2) {
-            printf("缺少任务参数 -spamCodeOut or -handleXcassets\n");
+            printf("缺少任务参数 -spamCodeOut or -handleXcassets or -deleteComments\n");
             return 1;
         }
         
@@ -41,6 +42,7 @@ int main(int argc, const char * argv[]) {
         NSString *projectDirString = nil;
         NSString *outDirString = nil;
         BOOL needHandleXcassets = NO;
+        BOOL needDeleteComments = NO;
         
         NSFileManager *fm = [NSFileManager defaultManager];
         for (NSInteger i = 1; i < arguments.count; i++) {
@@ -75,17 +77,31 @@ int main(int argc, const char * argv[]) {
             }
             if ([argument isEqualToString:@"-handleXcassets"]) {
                 needHandleXcassets = YES;
+                continue;
+            }
+            if ([argument isEqualToString:@"-deleteComments"]) {
+                needDeleteComments = YES;
+                continue;
             }
         }
         
-        
-        recursiveDirectory(projectDirString, ^(NSString *mFilePath){
-            generateSpamCodeFile(outDirString, mFilePath, GSCSourceTypeClass);
-            generateSpamCodeFile(outDirString, mFilePath, GSCSourceTypeCategory);
-        });
-        
+        if (outDirString) {
+            @autoreleasepool {
+                recursiveDirectory(projectDirString, ^(NSString *mFilePath){
+                    generateSpamCodeFile(outDirString, mFilePath, GSCSourceTypeClass);
+                    generateSpamCodeFile(outDirString, mFilePath, GSCSourceTypeCategory);
+                });
+            }
+        }
         if (needHandleXcassets) {
-            handleXcassetsFiels(projectDirString);
+            @autoreleasepool {
+                handleXcassetsFiles(projectDirString);
+            }
+        }
+        if (needDeleteComments) {
+            @autoreleasepool {
+                deleteComments(projectDirString);
+            }
         }
     }
     return 0;
@@ -224,14 +240,14 @@ NSString *randomString(NSInteger length) {
     return ret;
 }
 
-void handleXcassetsFiels(NSString *directory) {
+void handleXcassetsFiles(NSString *directory) {
     NSFileManager *fm = [NSFileManager defaultManager];
     NSArray<NSString *> *files = [fm contentsOfDirectoryAtPath:directory error:nil];
     BOOL isDirectory;
     for (NSString *fileName in files) {
         NSString *filePath = [directory stringByAppendingPathComponent:fileName];
         if ([fm fileExistsAtPath:filePath isDirectory:&isDirectory] && isDirectory) {
-            handleXcassetsFiels(filePath);
+            handleXcassetsFiles(filePath);
             continue;
         }
         if (![fileName isEqualToString:@"Contents.json"]) continue;
@@ -282,5 +298,39 @@ void handleXcassetsFiels(NSString *directory) {
             
             matches = [expression matchesInString:fileContent options:0 range:NSMakeRange(0, fileContent.length)];
         }
+    }
+}
+
+void regularReplacement(NSMutableString *originalString, NSString *regularExpression, NSString *newString) {
+    BOOL isGroupNo1 = [newString isEqualToString:@"\\1"];
+    NSRegularExpression *expression = [NSRegularExpression regularExpressionWithPattern:regularExpression options:NSRegularExpressionAnchorsMatchLines|NSRegularExpressionUseUnixLineSeparators|NSRegularExpressionUseUnicodeWordBoundaries error:nil];
+    NSArray<NSTextCheckingResult *> *matches = [expression matchesInString:originalString options:0 range:NSMakeRange(0, originalString.length)];
+    [matches enumerateObjectsWithOptions:NSEnumerationReverse usingBlock:^(NSTextCheckingResult * _Nonnull obj, NSUInteger idx, BOOL * _Nonnull stop) {
+        if (isGroupNo1) {
+            NSString *withString = [originalString substringWithRange:[obj rangeAtIndex:1]];
+            [originalString replaceCharactersInRange:obj.range withString:withString];
+        } else {
+            [originalString replaceCharactersInRange:obj.range withString:newString];
+        }
+    }];
+}
+
+void deleteComments(NSString *directory) {
+    NSFileManager *fm = [NSFileManager defaultManager];
+    NSArray<NSString *> *files = [fm contentsOfDirectoryAtPath:directory error:nil];
+    BOOL isDirectory;
+    for (NSString *fileName in files) {
+        NSString *filePath = [directory stringByAppendingPathComponent:fileName];
+        if ([fm fileExistsAtPath:filePath isDirectory:&isDirectory] && isDirectory) {
+            deleteComments(filePath);
+            continue;
+        }
+        if (![fileName hasSuffix:@".h"] && ![fileName hasSuffix:@".m"]) continue;
+        NSMutableString *fileContent = [NSMutableString stringWithContentsOfFile:filePath encoding:NSUTF8StringEncoding error:nil];
+        regularReplacement(fileContent, @"([^:])//.*",              @"\\1");
+        regularReplacement(fileContent, @"^//.*",                   @"");
+        regularReplacement(fileContent, @"/\\*{1,2}[\\s\\S]*?\\*/", @"");
+        regularReplacement(fileContent, @"^\\s*\\n",                @"");
+        [fileContent writeToFile:filePath atomically:YES encoding:NSUTF8StringEncoding error:nil];
     }
 }
