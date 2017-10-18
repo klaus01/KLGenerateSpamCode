@@ -128,8 +128,8 @@ void recursiveDirectory(NSString *directory, void(^handleFile)(NSString *mFilePa
     }
 }
 
-static NSString *const kClassCategoryName = @"GSC_CLASS_GenerateSpamCode";
-static NSString *const kCategoryCategoryName = @"GSC_CATEGORY_GenerateSpamCode";
+static NSString *const kClassCategoryName = @"GSC_CLASS_CODE";
+static NSString *const kCategoryCategoryName = @"GSC_CATEGORY_CODE";
 static NSString *const kHSystemClassFileTemplate = @"\
 #import <Foundation/Foundation.h>\n\
 #import <UIKit/UIKit.h>\n\
@@ -190,7 +190,7 @@ void generateSpamCodeFile(NSString *outDirectory, NSString *mFilePath, GSCSource
         NSMutableString *mFileMethodsString = [NSMutableString string];
         [matches enumerateObjectsUsingBlock:^(NSTextCheckingResult * _Nonnull matche, NSUInteger idx, BOOL * _Nonnull stop) {
             NSString *symbol = [implementation substringWithRange:[matche rangeAtIndex:1]];
-            NSString *methodName = [@"gsc_ppp_" stringByAppendingString:randomString(arc4random_uniform(16) + 16)];
+            NSString *methodName = [@"gsc" stringByAppendingString:randomString(arc4random_uniform(16) + 16)];
             [hFileMethodsString appendFormat:@"%@ (NSArray *)%@;\n", symbol, methodName];
             
             [mFileMethodsString appendFormat:@"%@ (NSArray *)%@ {\n", symbol, methodName];
@@ -325,9 +325,9 @@ void deleteComments(NSString *directory) {
             deleteComments(filePath);
             continue;
         }
-        if (![fileName hasSuffix:@".h"] && ![fileName hasSuffix:@".m"]) continue;
+        if (![fileName hasSuffix:@".h"] && ![fileName hasSuffix:@".m"] && ![fileName hasSuffix:@".swift"]) continue;
         NSMutableString *fileContent = [NSMutableString stringWithContentsOfFile:filePath encoding:NSUTF8StringEncoding error:nil];
-        regularReplacement(fileContent, @"([^:])//.*",              @"\\1");
+        regularReplacement(fileContent, @"([^:/])//.*",             @"\\1");
         regularReplacement(fileContent, @"^//.*",                   @"");
         regularReplacement(fileContent, @"/\\*{1,2}[\\s\\S]*?\\*/", @"");
         regularReplacement(fileContent, @"^\\s*\\n",                @"");
