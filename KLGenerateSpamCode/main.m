@@ -16,6 +16,7 @@ typedef NS_ENUM(NSInteger, GSCSourceType) {
 
 void recursiveDirectory(NSString *directory, NSArray<NSString *> *ignoreDirNames, void(^handleMFile)(NSString *mFilePath), void(^handleSwiftFile)(NSString *swiftFilePath));
 void generateSpamCodeFile(NSString *outDirectory, NSString *mFilePath, GSCSourceType type);
+void generateSwiftSpamCodeFile(NSString *outDirectory, NSString *swiftFilePath);
 NSString *randomString(NSInteger length);
 void handleXcassetsFiles(NSString *directory);
 void deleteComments(NSString *directory);
@@ -64,6 +65,14 @@ int main(int argc, const char * argv[]) {
             }
             // TODO: 增加修改类名功能
             
+            if ([argument isEqualToString:@"-handleXcassets"]) {
+                needHandleXcassets = YES;
+                continue;
+            }
+            if ([argument isEqualToString:@"-deleteComments"]) {
+                needDeleteComments = YES;
+                continue;
+            }
             if ([argument isEqualToString:@"-spamCodeOut"]) {
                 outDirString = arguments[++i];
                 if ([fm fileExistsAtPath:outDirString isDirectory:&isDirectory]) {
@@ -98,26 +107,8 @@ int main(int argc, const char * argv[]) {
                 ignoreDirNames = [arguments[++i] componentsSeparatedByString:@","];
                 continue;
             }
-            if ([argument isEqualToString:@"-handleXcassets"]) {
-                needHandleXcassets = YES;
-                continue;
-            }
-            if ([argument isEqualToString:@"-deleteComments"]) {
-                needDeleteComments = YES;
-                continue;
-            }
         }
         
-        if (outDirString) {
-            recursiveDirectory(projectDirString, ignoreDirNames, ^(NSString *mFilePath) {
-                @autoreleasepool {
-                    generateSpamCodeFile(outDirString, mFilePath, GSCSourceTypeClass);
-                    generateSpamCodeFile(outDirString, mFilePath, GSCSourceTypeCategory);
-                }
-            }, ^(NSString *swiftFilePath) {
-            });
-            printf("生成垃圾代码完成\n");
-        }
         if (needHandleXcassets) {
             @autoreleasepool {
                 handleXcassetsFiles(projectDirString);
@@ -129,6 +120,19 @@ int main(int argc, const char * argv[]) {
                 deleteComments(projectDirString);
             }
             printf("删除注释和空行完成\n");
+        }
+        if (outDirString) {
+            recursiveDirectory(projectDirString, ignoreDirNames, ^(NSString *mFilePath) {
+                @autoreleasepool {
+                    generateSpamCodeFile(outDirString, mFilePath, GSCSourceTypeClass);
+                    generateSpamCodeFile(outDirString, mFilePath, GSCSourceTypeCategory);
+                }
+            }, ^(NSString *swiftFilePath) {
+                @autoreleasepool {
+                    generateSwiftSpamCodeFile(outDirString, swiftFilePath);
+                }
+            });
+            printf("生成垃圾代码完成\n");
         }
     }
     return 0;
@@ -272,6 +276,101 @@ void generateSpamCodeFile(NSString *outDirectory, NSString *mFilePath, GSCSource
         fileName = [NSString stringWithFormat:@"%@+%@.m", className, newCategoryName];
         fileContent = [NSString stringWithFormat:kMClassFileTemplate, className, newCategoryName, className, newCategoryName, mFileMethodsString];
         [fileContent writeToFile:[outDirectory stringByAppendingPathComponent:fileName] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+    }];
+}
+
+NSRange getOutermostCurlyBraceRange(NSString *string, unichar beginChar, unichar endChar, NSInteger beginIndex) {
+    NSInteger braceCount = -1;
+    NSInteger endIndex = string.length - 1;
+    for (NSInteger i = beginIndex; i <= endIndex; i++) {
+        unichar c = [string characterAtIndex:i];
+        if (c == beginChar) {
+            braceCount = ((braceCount == -1) ? 0 : braceCount) + 1;
+        } else if (c == endChar) {
+            braceCount--;
+        }
+        if (braceCount == 0) {
+            endIndex = i;
+            break;
+        }
+    }
+    return NSMakeRange(beginIndex + 1, endIndex - beginIndex - 1);
+}
+
+NSString * getSwiftImportString(NSString *string) {
+    NSMutableString *ret = [NSMutableString string];
+    
+    NSRegularExpression *expression = [NSRegularExpression regularExpressionWithPattern:@"^ *import *.+" options:NSRegularExpressionAnchorsMatchLines|NSRegularExpressionUseUnicodeWordBoundaries error:nil];
+    
+    NSArray<NSTextCheckingResult *> *matches = [expression matchesInString:string options:0 range:NSMakeRange(0, string.length)];
+    [matches enumerateObjectsUsingBlock:^(NSTextCheckingResult * _Nonnull obj, NSUInteger idx, BOOL * _Nonnull stop) {
+        NSString *importRow = [string substringWithRange:obj.range];
+        [ret appendString:importRow];
+        [ret appendString:@"\n"];
+    }];
+    
+    return ret;
+}
+
+static NSString *const kSwiftFileTemplate = @"\
+%@\n\
+extension %@ {\n%@\
+}";
+static NSString *const kSwiftMethodTemplate = @"\
+    func %@%@(_ %@: String%@) {\n\
+        print(%@)\n\
+    }\n";
+void generateSwiftSpamCodeFile(NSString *outDirectory, NSString *swiftFilePath) {
+    NSString *swiftFileContent = [NSString stringWithContentsOfFile:swiftFilePath encoding:NSUTF8StringEncoding error:nil];
+    
+    // 查找 class 声明
+    NSRegularExpression *expression = [NSRegularExpression regularExpressionWithPattern:@" *(class|struct) +(\\w+)[^{]+" options:NSRegularExpressionUseUnicodeWordBoundaries error:nil];
+    NSArray<NSTextCheckingResult *> *matches = [expression matchesInString:swiftFileContent options:0 range:NSMakeRange(0, swiftFileContent.length)];
+    if (matches.count <= 0) return;
+    
+    NSString *fileImportStrings = getSwiftImportString(swiftFileContent);
+    __block NSInteger braceEndIndex = 0;
+    [matches enumerateObjectsUsingBlock:^(NSTextCheckingResult * _Nonnull classResult, NSUInteger idx, BOOL * _Nonnull stop) {
+        // 已经处理到该 range 后面去了，过掉
+        NSInteger matchEndIndex = classResult.range.location + classResult.range.length;
+        if (matchEndIndex < braceEndIndex) return;
+        // 是 class 方法，过掉
+        NSString *fullMatchString = [swiftFileContent substringWithRange:classResult.range];
+        if ([fullMatchString containsString:@"("]) return;
+        
+        NSRange braceRange = getOutermostCurlyBraceRange(swiftFileContent, '{', '}', matchEndIndex);
+        braceEndIndex = braceRange.location + braceRange.length;
+        
+        // 查找方法
+        NSString *classContent = [swiftFileContent substringWithRange:braceRange];
+        NSRegularExpression *expression = [NSRegularExpression regularExpressionWithPattern:@"func +([^(]+)\\([^{]+" options:NSRegularExpressionUseUnicodeWordBoundaries error:nil];
+        NSArray<NSTextCheckingResult *> *matches = [expression matchesInString:classContent options:0 range:NSMakeRange(0, classContent.length)];
+        if (matches.count <= 0) return;
+        
+        NSMutableString *methodsString = [NSMutableString string];
+        [matches enumerateObjectsUsingBlock:^(NSTextCheckingResult * _Nonnull funcResult, NSUInteger idx, BOOL * _Nonnull stop) {
+            NSRange funcNameRange = [funcResult rangeAtIndex:1];
+            NSString *funcName = [classContent substringWithRange:funcNameRange];
+            NSRange oldParameterRange = getOutermostCurlyBraceRange(classContent, '(', ')', funcNameRange.location + funcNameRange.length);
+            NSString *oldParameterName = [classContent substringWithRange:oldParameterRange];
+            oldParameterName = [oldParameterName stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+            if (oldParameterName.length > 0) {
+                oldParameterName = [@", " stringByAppendingString:oldParameterName];
+            }
+            [methodsString appendFormat:kSwiftMethodTemplate, funcName, gOutParameterName.capitalizedString, gOutParameterName, oldParameterName, gOutParameterName];
+        }];
+        if (methodsString.length <= 0) return;
+        
+        NSString *className = [swiftFileContent substringWithRange:[classResult rangeAtIndex:2]];
+        
+        NSString *fileName = [NSString stringWithFormat:@"%@%@Ext.swift", className, gOutParameterName.capitalizedString];
+        NSString *filePath = [outDirectory stringByAppendingPathComponent:fileName];
+        NSString *fileContent = @"";
+        if ([[NSFileManager defaultManager] fileExistsAtPath:filePath]) {
+            fileContent = [NSString stringWithContentsOfFile:filePath encoding:NSUTF8StringEncoding error:nil];
+        }
+        fileContent = [fileContent stringByAppendingFormat:kSwiftFileTemplate, fileImportStrings, className, methodsString];
+        [fileContent writeToFile:filePath atomically:YES encoding:NSUTF8StringEncoding error:nil];
     }];
 }
 
