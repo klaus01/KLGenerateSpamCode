@@ -9,6 +9,12 @@
 #import <Foundation/Foundation.h>
 #include <stdlib.h>
 
+// 命令行修改工程目录下所有 png 资源 hash 值
+// 使用 ImageMagick 进行图片压缩，所以需要安装 ImageMagick，安装方法 brew install imagemagick
+// find . -iname "*.png" -exec echo {} \; -exec convert {} {} \;
+// or
+// find . -iname "*.png" -exec echo {} \; -exec convert {} -quality 95 {} \;
+
 typedef NS_ENUM(NSInteger, GSCSourceType) {
     GSCSourceTypeClass,
     GSCSourceTypeCategory,
@@ -20,14 +26,69 @@ void generateSwiftSpamCodeFile(NSString *outDirectory, NSString *swiftFilePath);
 NSString *randomString(NSInteger length);
 void handleXcassetsFiles(NSString *directory);
 void deleteComments(NSString *directory);
+void modifyProjectName(NSString *projectDirString, NSString *oldName, NSString *newName);
 
 NSString *gOutParameterName = nil;
 
-// 命令行修改工程目录下所有 png 资源 hash 值
-// 使用 ImageMagick 进行图片压缩，所以需要安装 ImageMagick，安装方法 brew install imagemagick
-// find . -iname "*.png" -exec echo {} \; -exec convert {} {} \;
-// or
-// find . -iname "*.png" -exec echo {} \; -exec convert {} -quality 95 {} \;
+#pragma mark - 公共方法
+
+static const NSString *kRandomAlphabet = @"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+NSString *randomString(NSInteger length) {
+    NSMutableString *ret = [NSMutableString stringWithCapacity:length];
+    for (int i = 0; i < length; i++) {
+        [ret appendFormat:@"%C", [kRandomAlphabet characterAtIndex:arc4random_uniform((uint32_t)[kRandomAlphabet length])]];
+    }
+    return ret;
+}
+
+NSRange getOutermostCurlyBraceRange(NSString *string, unichar beginChar, unichar endChar, NSInteger beginIndex) {
+    NSInteger braceCount = -1;
+    NSInteger endIndex = string.length - 1;
+    for (NSInteger i = beginIndex; i <= endIndex; i++) {
+        unichar c = [string characterAtIndex:i];
+        if (c == beginChar) {
+            braceCount = ((braceCount == -1) ? 0 : braceCount) + 1;
+        } else if (c == endChar) {
+            braceCount--;
+        }
+        if (braceCount == 0) {
+            endIndex = i;
+            break;
+        }
+    }
+    return NSMakeRange(beginIndex + 1, endIndex - beginIndex - 1);
+}
+
+NSString * getSwiftImportString(NSString *string) {
+    NSMutableString *ret = [NSMutableString string];
+    
+    NSRegularExpression *expression = [NSRegularExpression regularExpressionWithPattern:@"^ *import *.+" options:NSRegularExpressionAnchorsMatchLines|NSRegularExpressionUseUnicodeWordBoundaries error:nil];
+    
+    NSArray<NSTextCheckingResult *> *matches = [expression matchesInString:string options:0 range:NSMakeRange(0, string.length)];
+    [matches enumerateObjectsUsingBlock:^(NSTextCheckingResult * _Nonnull obj, NSUInteger idx, BOOL * _Nonnull stop) {
+        NSString *importRow = [string substringWithRange:obj.range];
+        [ret appendString:importRow];
+        [ret appendString:@"\n"];
+    }];
+    
+    return ret;
+}
+
+void regularReplacement(NSMutableString *originalString, NSString *regularExpression, NSString *newString) {
+    BOOL isGroupNo1 = [newString isEqualToString:@"\\1"];
+    NSRegularExpression *expression = [NSRegularExpression regularExpressionWithPattern:regularExpression options:NSRegularExpressionAnchorsMatchLines|NSRegularExpressionUseUnixLineSeparators|NSRegularExpressionUseUnicodeWordBoundaries error:nil];
+    NSArray<NSTextCheckingResult *> *matches = [expression matchesInString:originalString options:0 range:NSMakeRange(0, originalString.length)];
+    [matches enumerateObjectsWithOptions:NSEnumerationReverse usingBlock:^(NSTextCheckingResult * _Nonnull obj, NSUInteger idx, BOOL * _Nonnull stop) {
+        if (isGroupNo1) {
+            NSString *withString = [originalString substringWithRange:[obj rangeAtIndex:1]];
+            [originalString replaceCharactersInRange:obj.range withString:withString];
+        } else {
+            [originalString replaceCharactersInRange:obj.range withString:newString];
+        }
+    }];
+}
+
+#pragma mark - 主入口
 
 int main(int argc, const char * argv[]) {
     @autoreleasepool {
@@ -47,6 +108,8 @@ int main(int argc, const char * argv[]) {
         NSArray<NSString *> *ignoreDirNames = nil;
         BOOL needHandleXcassets = NO;
         BOOL needDeleteComments = NO;
+        NSString *oldProjectName = nil;
+        NSString *newProjectName = nil;
         
         NSFileManager *fm = [NSFileManager defaultManager];
         for (NSInteger i = 1; i < arguments.count; i++) {
@@ -63,7 +126,7 @@ int main(int argc, const char * argv[]) {
                 }
                 continue;
             }
-            // TODO: 增加修改类名功能
+            // TODO: 修改增加类名前缀功能
             
             if ([argument isEqualToString:@"-handleXcassets"]) {
                 needHandleXcassets = YES;
@@ -71,6 +134,21 @@ int main(int argc, const char * argv[]) {
             }
             if ([argument isEqualToString:@"-deleteComments"]) {
                 needDeleteComments = YES;
+                continue;
+            }
+            if ([argument isEqualToString:@"-modifyProjectName"]) {
+                NSString *string = arguments[++i];
+                NSArray<NSString *> *names = [string componentsSeparatedByString:@">"];
+                if (names.count < 2) {
+                    printf("修改工程名参数错误。参数示例：AMApp>GGApp，传入参数：%s\n", string.UTF8String);
+                    return 1;
+                }
+                oldProjectName = names[0];
+                newProjectName = names[1];
+                if (oldProjectName.length <= 0 || newProjectName.length <= 0) {
+                    printf("修改工程名参数错误。参数示例：AMApp>GGApp，传入参数：%s\n", string.UTF8String);
+                    return 1;
+                }
                 continue;
             }
             if ([argument isEqualToString:@"-spamCodeOut"]) {
@@ -121,6 +199,13 @@ int main(int argc, const char * argv[]) {
             }
             printf("删除注释和空行完成\n");
         }
+        if (oldProjectName && newProjectName) {
+            @autoreleasepool {
+                NSString *dir = projectDirString.stringByDeletingLastPathComponent;
+                modifyProjectName(dir, oldProjectName, newProjectName);
+            }
+            printf("修改工程名完成\n");
+        }
         if (outDirString) {
             recursiveDirectory(projectDirString, ignoreDirNames, ^(NSString *mFilePath) {
                 @autoreleasepool {
@@ -137,6 +222,8 @@ int main(int argc, const char * argv[]) {
     }
     return 0;
 }
+
+#pragma mark - 生成垃圾代码
 
 void recursiveDirectory(NSString *directory, NSArray<NSString *> *ignoreDirNames, void(^handleMFile)(NSString *mFilePath), void(^handleSwiftFile)(NSString *swiftFilePath)) {
     NSFileManager *fm = [NSFileManager defaultManager];
@@ -279,39 +366,6 @@ void generateSpamCodeFile(NSString *outDirectory, NSString *mFilePath, GSCSource
     }];
 }
 
-NSRange getOutermostCurlyBraceRange(NSString *string, unichar beginChar, unichar endChar, NSInteger beginIndex) {
-    NSInteger braceCount = -1;
-    NSInteger endIndex = string.length - 1;
-    for (NSInteger i = beginIndex; i <= endIndex; i++) {
-        unichar c = [string characterAtIndex:i];
-        if (c == beginChar) {
-            braceCount = ((braceCount == -1) ? 0 : braceCount) + 1;
-        } else if (c == endChar) {
-            braceCount--;
-        }
-        if (braceCount == 0) {
-            endIndex = i;
-            break;
-        }
-    }
-    return NSMakeRange(beginIndex + 1, endIndex - beginIndex - 1);
-}
-
-NSString * getSwiftImportString(NSString *string) {
-    NSMutableString *ret = [NSMutableString string];
-    
-    NSRegularExpression *expression = [NSRegularExpression regularExpressionWithPattern:@"^ *import *.+" options:NSRegularExpressionAnchorsMatchLines|NSRegularExpressionUseUnicodeWordBoundaries error:nil];
-    
-    NSArray<NSTextCheckingResult *> *matches = [expression matchesInString:string options:0 range:NSMakeRange(0, string.length)];
-    [matches enumerateObjectsUsingBlock:^(NSTextCheckingResult * _Nonnull obj, NSUInteger idx, BOOL * _Nonnull stop) {
-        NSString *importRow = [string substringWithRange:obj.range];
-        [ret appendString:importRow];
-        [ret appendString:@"\n"];
-    }];
-    
-    return ret;
-}
-
 static NSString *const kSwiftFileTemplate = @"\
 %@\n\
 extension %@ {\n%@\
@@ -374,14 +428,7 @@ void generateSwiftSpamCodeFile(NSString *outDirectory, NSString *swiftFilePath) 
     }];
 }
 
-static const NSString *kRandomAlphabet = @"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-NSString *randomString(NSInteger length) {
-    NSMutableString *ret = [NSMutableString stringWithCapacity:length];
-    for (int i = 0; i < length; i++) {
-        [ret appendFormat:@"%C", [kRandomAlphabet characterAtIndex:arc4random_uniform((uint32_t)[kRandomAlphabet length])]];
-    }
-    return ret;
-}
+#pragma mark - 处理 Xcassets 中的图片文件
 
 void handleXcassetsFiles(NSString *directory) {
     NSFileManager *fm = [NSFileManager defaultManager];
@@ -444,19 +491,7 @@ void handleXcassetsFiles(NSString *directory) {
     }
 }
 
-void regularReplacement(NSMutableString *originalString, NSString *regularExpression, NSString *newString) {
-    BOOL isGroupNo1 = [newString isEqualToString:@"\\1"];
-    NSRegularExpression *expression = [NSRegularExpression regularExpressionWithPattern:regularExpression options:NSRegularExpressionAnchorsMatchLines|NSRegularExpressionUseUnixLineSeparators|NSRegularExpressionUseUnicodeWordBoundaries error:nil];
-    NSArray<NSTextCheckingResult *> *matches = [expression matchesInString:originalString options:0 range:NSMakeRange(0, originalString.length)];
-    [matches enumerateObjectsWithOptions:NSEnumerationReverse usingBlock:^(NSTextCheckingResult * _Nonnull obj, NSUInteger idx, BOOL * _Nonnull stop) {
-        if (isGroupNo1) {
-            NSString *withString = [originalString substringWithRange:[obj rangeAtIndex:1]];
-            [originalString replaceCharactersInRange:obj.range withString:withString];
-        } else {
-            [originalString replaceCharactersInRange:obj.range withString:newString];
-        }
-    }];
-}
+#pragma mark - 删除注释
 
 void deleteComments(NSString *directory) {
     NSFileManager *fm = [NSFileManager defaultManager];
@@ -475,5 +510,80 @@ void deleteComments(NSString *directory) {
         regularReplacement(fileContent, @"/\\*{1,2}[\\s\\S]*?\\*/", @"");
         regularReplacement(fileContent, @"^\\s*\\n",                @"");
         [fileContent writeToFile:filePath atomically:YES encoding:NSUTF8StringEncoding error:nil];
+    }
+}
+
+#pragma mark - 修改工程名
+
+BOOL renameFile(NSString *oldPath, NSString *newPath) {
+    NSError *error = nil;
+    BOOL ret = [[NSFileManager defaultManager] moveItemAtPath:oldPath toPath:newPath error:&error];
+    if (error) {
+        printf("修改文件名称失败。\n  oldPath=%s\n  newPath=%s\n  ERROR:%s\n", oldPath.UTF8String, newPath.UTF8String, error.localizedDescription.UTF8String);
+    }
+    return ret;
+}
+
+void replaceProjectFileContent(NSString *filePath, NSString *oldString, NSString *newString) {
+    NSMutableString *fileContent = [NSMutableString stringWithContentsOfFile:filePath encoding:NSUTF8StringEncoding error:nil];
+    
+    NSString *regularExpression = [NSString stringWithFormat:@"\\b%@\\b", oldString];
+    NSRegularExpression *expression = [NSRegularExpression regularExpressionWithPattern:regularExpression options:0 error:nil];
+    NSArray<NSTextCheckingResult *> *matches = [expression matchesInString:fileContent options:0 range:NSMakeRange(0, fileContent.length)];
+    [matches enumerateObjectsWithOptions:NSEnumerationReverse usingBlock:^(NSTextCheckingResult * _Nonnull obj, NSUInteger idx, BOOL * _Nonnull stop) {
+        [fileContent replaceCharactersInRange:obj.range withString:newString];
+    }];
+    
+    [fileContent writeToFile:filePath atomically:YES encoding:NSUTF8StringEncoding error:nil];
+}
+
+void modifyProjectName(NSString *projectDir, NSString *oldName, NSString *newName) {
+    NSString *sourceCodeDirPath = [projectDir stringByAppendingPathComponent:oldName];
+    NSString *xcodeprojFilePath = [sourceCodeDirPath stringByAppendingPathExtension:@"xcodeproj"];
+    NSString *xcworkspaceFilePath = [sourceCodeDirPath stringByAppendingPathExtension:@"xcworkspace"];
+    
+    NSFileManager *fm = [NSFileManager defaultManager];
+    BOOL isDirectory;
+    
+    // 改源代码文件夹名称
+    if ([fm fileExistsAtPath:sourceCodeDirPath isDirectory:&isDirectory] && isDirectory) {
+        if (!renameFile(sourceCodeDirPath, [projectDir stringByAppendingPathComponent:newName])) return;
+    }
+    
+    // 改工程文件内容
+    if ([fm fileExistsAtPath:xcodeprojFilePath isDirectory:&isDirectory] && isDirectory) {
+        // 替换 project.pbxproj 文件内容
+        NSString *projectPbxprojFilePath = [xcodeprojFilePath stringByAppendingPathComponent:@"project.pbxproj"];
+        if ([fm fileExistsAtPath:projectPbxprojFilePath]) {
+            replaceProjectFileContent(projectPbxprojFilePath, oldName, newName);
+        }
+        // 替换 project.xcworkspace/contents.xcworkspacedata 文件内容
+        NSString *contentsXcworkspacedataFilePath = [xcodeprojFilePath stringByAppendingPathComponent:@"project.xcworkspace/contents.xcworkspacedata"];
+        if ([fm fileExistsAtPath:contentsXcworkspacedataFilePath]) {
+            replaceProjectFileContent(contentsXcworkspacedataFilePath, oldName, newName);
+        }
+        // xcuserdata 本地用户文件
+        NSString *xcuserdataFilePath = [xcodeprojFilePath stringByAppendingPathComponent:@"xcuserdata"];
+        if ([fm fileExistsAtPath:xcuserdataFilePath]) {
+            [fm removeItemAtPath:xcuserdataFilePath error:nil];
+        }
+        // 改名工程文件
+        if (!renameFile(xcodeprojFilePath, [[projectDir stringByAppendingPathComponent:newName] stringByAppendingPathExtension:@"xcodeproj"])) return;
+    }
+    
+    // 改工程组文件内容
+    if ([fm fileExistsAtPath:xcworkspaceFilePath isDirectory:&isDirectory] && isDirectory) {
+        // 替换 contents.xcworkspacedata 文件内容
+        NSString *contentsXcworkspacedataFilePath = [xcworkspaceFilePath stringByAppendingPathComponent:@"contents.xcworkspacedata"];
+        if ([fm fileExistsAtPath:contentsXcworkspacedataFilePath]) {
+            replaceProjectFileContent(contentsXcworkspacedataFilePath, oldName, newName);
+        }
+        // xcuserdata 本地用户文件
+        NSString *xcuserdataFilePath = [xcworkspaceFilePath stringByAppendingPathComponent:@"xcuserdata"];
+        if ([fm fileExistsAtPath:xcuserdataFilePath]) {
+            [fm removeItemAtPath:xcuserdataFilePath error:nil];
+        }
+        // 改名工程文件
+        if (!renameFile(xcworkspaceFilePath, [[projectDir stringByAppendingPathComponent:newName] stringByAppendingPathExtension:@"xcworkspace"])) return;
     }
 }
