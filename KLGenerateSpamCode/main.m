@@ -90,6 +90,15 @@ void regularReplacement(NSMutableString *originalString, NSString *regularExpres
     }];
 }
 
+void renameFile(NSString *oldPath, NSString *newPath) {
+    NSError *error;
+    [[NSFileManager defaultManager] moveItemAtPath:oldPath toPath:newPath error:&error];
+    if (error) {
+        printf("修改文件名称失败。\n  oldPath=%s\n  newPath=%s\n  ERROR:%s\n", oldPath.UTF8String, newPath.UTF8String, error.localizedDescription.UTF8String);
+        abort();
+    }
+}
+
 #pragma mark - 主入口
 
 int main(int argc, const char * argv[]) {
@@ -515,9 +524,7 @@ void handleXcassetsFiles(NSString *directory) {
                     newImageFilePath = [filePath.stringByDeletingLastPathComponent stringByAppendingPathComponent:newImageFileName];
                 }
                 
-                NSError *error = nil;
-                [fm moveItemAtPath:imageFilePath toPath:newImageFilePath error:&error];
-                assert(!error);
+                renameFile(imageFilePath, newImageFilePath);
                 
                 fileContent = [fileContent stringByReplacingOccurrencesOfString:[NSString stringWithFormat:@"\"%@\"", imageFileName]
                                                                      withString:[NSString stringWithFormat:@"\"%@\"", newImageFileName]];
@@ -557,15 +564,6 @@ void deleteComments(NSString *directory) {
 
 #pragma mark - 修改工程名
 
-BOOL renameFile(NSString *oldPath, NSString *newPath) {
-    NSError *error = nil;
-    BOOL ret = [[NSFileManager defaultManager] moveItemAtPath:oldPath toPath:newPath error:&error];
-    if (error) {
-        printf("修改文件名称失败。\n  oldPath=%s\n  newPath=%s\n  ERROR:%s\n", oldPath.UTF8String, newPath.UTF8String, error.localizedDescription.UTF8String);
-    }
-    return ret;
-}
-
 void replaceProjectFileContent(NSString *filePath, NSString *oldString, NSString *newString) {
     NSMutableString *fileContent = [NSMutableString stringWithContentsOfFile:filePath encoding:NSUTF8StringEncoding error:nil];
     
@@ -589,7 +587,7 @@ void modifyProjectName(NSString *projectDir, NSString *oldName, NSString *newNam
     
     // 改源代码文件夹名称
     if ([fm fileExistsAtPath:sourceCodeDirPath isDirectory:&isDirectory] && isDirectory) {
-        if (!renameFile(sourceCodeDirPath, [projectDir stringByAppendingPathComponent:newName])) return;
+        renameFile(sourceCodeDirPath, [projectDir stringByAppendingPathComponent:newName]);
     }
     
     // 改工程文件内容
@@ -610,7 +608,7 @@ void modifyProjectName(NSString *projectDir, NSString *oldName, NSString *newNam
             [fm removeItemAtPath:xcuserdataFilePath error:nil];
         }
         // 改名工程文件
-        if (!renameFile(xcodeprojFilePath, [[projectDir stringByAppendingPathComponent:newName] stringByAppendingPathExtension:@"xcodeproj"])) return;
+        renameFile(xcodeprojFilePath, [[projectDir stringByAppendingPathComponent:newName] stringByAppendingPathExtension:@"xcodeproj"]);
     }
     
     // 改工程组文件内容
@@ -626,7 +624,7 @@ void modifyProjectName(NSString *projectDir, NSString *oldName, NSString *newNam
             [fm removeItemAtPath:xcuserdataFilePath error:nil];
         }
         // 改名工程文件
-        if (!renameFile(xcworkspaceFilePath, [[projectDir stringByAppendingPathComponent:newName] stringByAppendingPathExtension:@"xcworkspace"])) return;
+        renameFile(xcworkspaceFilePath, [[projectDir stringByAppendingPathComponent:newName] stringByAppendingPathExtension:@"xcworkspace"]);
     }
 }
 
@@ -696,10 +694,10 @@ void modifyClassNamePrefix(NSMutableString *projectContent, NSString *sourceCode
             if ([files containsObject:mFileName]) {
                 NSString *oldFilePath = [[sourceCodeDir stringByAppendingPathComponent:fileName] stringByAppendingPathExtension:@"h"];
                 NSString *newFilePath = [[sourceCodeDir stringByAppendingPathComponent:newClassName] stringByAppendingPathExtension:@"h"];
-                [fm moveItemAtPath:oldFilePath toPath:newFilePath error:nil];
+                renameFile(oldFilePath, newFilePath);
                 oldFilePath = [[sourceCodeDir stringByAppendingPathComponent:fileName] stringByAppendingPathExtension:@"m"];
                 newFilePath = [[sourceCodeDir stringByAppendingPathComponent:newClassName] stringByAppendingPathExtension:@"m"];
-                [fm moveItemAtPath:oldFilePath toPath:newFilePath error:nil];
+                renameFile(oldFilePath, newFilePath);
                 
                 @autoreleasepool {
                     modifyFilesClassName(gSourceCodeDir, fileName, newClassName);
@@ -710,7 +708,8 @@ void modifyClassNamePrefix(NSMutableString *projectContent, NSString *sourceCode
         } else if ([fileExtension isEqualToString:@"swift"]) {
             NSString *oldFilePath = [[sourceCodeDir stringByAppendingPathComponent:fileName] stringByAppendingPathExtension:@"swift"];
             NSString *newFilePath = [[sourceCodeDir stringByAppendingPathComponent:newClassName] stringByAppendingPathExtension:@"swift"];
-            [fm moveItemAtPath:oldFilePath toPath:newFilePath error:nil];
+            renameFile(oldFilePath, newFilePath);
+            
             @autoreleasepool {
                 modifyFilesClassName(gSourceCodeDir, fileName.stringByDeletingPathExtension, newClassName);
             }
