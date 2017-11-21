@@ -242,6 +242,7 @@ int main(int argc, const char * argv[]) {
             printf("修改工程名完成\n");
         }
         if (oldClassNamePrefix && newClassNamePrefix) {
+            printf("开始修改类名前缀...\n");
             @autoreleasepool {
                 // 打开工程文件
                 NSError *error = nil;
@@ -420,7 +421,7 @@ void generateSpamCodeFile(NSString *outDirectory, NSString *mFilePath, GSCSource
 static NSString *const kSwiftFileTemplate = @"\
 %@\n\
 extension %@ {\n%@\
-}";
+}\n";
 static NSString *const kSwiftMethodTemplate = @"\
     func %@%@(_ %@: String%@) {\n\
         print(%@)\n\
