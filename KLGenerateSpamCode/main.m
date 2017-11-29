@@ -76,11 +76,15 @@ NSString * getSwiftImportString(NSString *string) {
     return ret;
 }
 
-void regularReplacement(NSMutableString *originalString, NSString *regularExpression, NSString *newString) {
+BOOL regularReplacement(NSMutableString *originalString, NSString *regularExpression, NSString *newString) {
+    __block BOOL isChanged = NO;
     BOOL isGroupNo1 = [newString isEqualToString:@"\\1"];
     NSRegularExpression *expression = [NSRegularExpression regularExpressionWithPattern:regularExpression options:NSRegularExpressionAnchorsMatchLines|NSRegularExpressionUseUnixLineSeparators error:nil];
     NSArray<NSTextCheckingResult *> *matches = [expression matchesInString:originalString options:0 range:NSMakeRange(0, originalString.length)];
     [matches enumerateObjectsWithOptions:NSEnumerationReverse usingBlock:^(NSTextCheckingResult * _Nonnull obj, NSUInteger idx, BOOL * _Nonnull stop) {
+        if (!isChanged) {
+            isChanged = YES;
+        }
         if (isGroupNo1) {
             NSString *withString = [originalString substringWithRange:[obj rangeAtIndex:1]];
             [originalString replaceCharactersInRange:obj.range withString:withString];
@@ -88,6 +92,7 @@ void regularReplacement(NSMutableString *originalString, NSString *regularExpres
             [originalString replaceCharactersInRange:obj.range withString:newString];
         }
     }];
+    return isChanged;
 }
 
 void renameFile(NSString *oldPath, NSString *newPath) {
@@ -644,7 +649,7 @@ void modifyFilesClassName(NSString *sourceCodeDir, NSString *oldClassName, NSStr
         }
         
         NSString *fileName = filePath.lastPathComponent;
-        if ([fileName hasSuffix:@".h"] || [fileName hasSuffix:@".m"] || [fileName hasSuffix:@".swift"] || [fileName hasSuffix:@".xib"] || [fileName hasSuffix:@".storyboard"]) {
+        if ([fileName hasSuffix:@".h"] || [fileName hasSuffix:@".m"] || [fileName hasSuffix:@".pch"] || [fileName hasSuffix:@".swift"] || [fileName hasSuffix:@".xib"] || [fileName hasSuffix:@".storyboard"]) {
             
             NSError *error = nil;
             NSMutableString *fileContent = [NSMutableString stringWithContentsOfFile:path encoding:NSUTF8StringEncoding error:&error];
@@ -654,7 +659,8 @@ void modifyFilesClassName(NSString *sourceCodeDir, NSString *oldClassName, NSStr
             }
             
             NSString *regularExpression = [NSString stringWithFormat:@"\\b%@\\b", oldClassName];
-            regularReplacement(fileContent, regularExpression, newClassName);
+            BOOL isChanged = regularReplacement(fileContent, regularExpression, newClassName);
+            if (!isChanged) continue;
             error = nil;
             [fileContent writeToFile:path atomically:YES encoding:NSUTF8StringEncoding error:&error];
             if (error) {
@@ -699,6 +705,11 @@ void modifyClassNamePrefix(NSMutableString *projectContent, NSString *sourceCode
                 oldFilePath = [[sourceCodeDir stringByAppendingPathComponent:fileName] stringByAppendingPathExtension:@"m"];
                 newFilePath = [[sourceCodeDir stringByAppendingPathComponent:newClassName] stringByAppendingPathExtension:@"m"];
                 renameFile(oldFilePath, newFilePath);
+                oldFilePath = [[sourceCodeDir stringByAppendingPathComponent:fileName] stringByAppendingPathExtension:@"xib"];
+                if ([fm fileExistsAtPath:oldFilePath]) {
+                    newFilePath = [[sourceCodeDir stringByAppendingPathComponent:newClassName] stringByAppendingPathExtension:@"xib"];
+                    renameFile(oldFilePath, newFilePath);
+                }
                 
                 @autoreleasepool {
                     modifyFilesClassName(gSourceCodeDir, fileName, newClassName);
@@ -710,6 +721,11 @@ void modifyClassNamePrefix(NSMutableString *projectContent, NSString *sourceCode
             NSString *oldFilePath = [[sourceCodeDir stringByAppendingPathComponent:fileName] stringByAppendingPathExtension:@"swift"];
             NSString *newFilePath = [[sourceCodeDir stringByAppendingPathComponent:newClassName] stringByAppendingPathExtension:@"swift"];
             renameFile(oldFilePath, newFilePath);
+            oldFilePath = [[sourceCodeDir stringByAppendingPathComponent:fileName] stringByAppendingPathExtension:@"xib"];
+            if ([fm fileExistsAtPath:oldFilePath]) {
+                newFilePath = [[sourceCodeDir stringByAppendingPathComponent:newClassName] stringByAppendingPathExtension:@"xib"];
+                renameFile(oldFilePath, newFilePath);
+            }
             
             @autoreleasepool {
                 modifyFilesClassName(gSourceCodeDir, fileName.stringByDeletingPathExtension, newClassName);
