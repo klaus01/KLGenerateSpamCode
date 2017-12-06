@@ -11,7 +11,7 @@
 ## 使用
 ### 使用源码
 1. 下载源码。
-1. 用 Xcode 打开工程并配置参数。如图![配置参数](https://github.com/klaus01/KLGenerateSpamCode/raw/master/images/p1.png)
+1. 用 Xcode 打开工程并配置参数。如图![配置参数](https://github.com/klaus01/KLGenerateSpamCode/raw/master/images/p2.png)
 1. 运行
 
 ### 使用二进制文件，在终端中执行 GenerateSpamCode
