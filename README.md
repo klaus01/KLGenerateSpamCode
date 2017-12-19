@@ -23,7 +23,7 @@ $ ./GenerateSpamCode \
 
 ### 参数说明
 - *(必填)* **源码文件夹绝对路径**（如：`/Users/kelei/Documents/work/git/projectName/source`）
-- **-modifyProjectName [原名称]>[新名称]** 修改工程名。程序会修改`源码文件夹绝对路径`名称，`原名称.xcodeproj`和`原名称.xcworkspace`的名称和内容。
+- **-modifyProjectName [原名称]>[新名称]** 修改工程名。程序会修改`原名称-Swift.h`、`Podfile`、`原名称-Bridging-Header.h`、`源码文件夹绝对路径`、`原名称.xcodeproj`和`原名称.xcworkspace`的名称和内容。*`Podfile`被修改后需要手动`pod install`*
 - **-modifyClassNamePrefix [工程文件 xcodeproj 绝对路径] [原前缀]>[新前缀]** 修改源代码类名前缀。程序会扫描`源码文件夹绝对路径`下的 .h .swift 文件，修改文件名，修改使用该类名的代码，修改`工程文件`中的文件名。文件名有`原前缀`的会修改成`新前缀`，如：`原前缀ViewController`变成`新前缀ViewController`；没有`原前缀`的会增加`新前缀`，如：`ViewController`变成`新前缀ViewController`。
 - **-spamCodeOut [垃圾代码文件输出目录] [垃圾代码方法增加的参数名]** 生成垃圾代码。程序会扫描`源码文件夹绝对路径`下的 .m .swift 文件中的类和方法，并生成`category`和`extension`文件，文件中的方法是在代码原方法的基础上增加`垃圾代码方法增加的参数名`参数。如：`-spamCodeOut /dir AppLog`，`- (void)setupKeys {}`>`- (void)setupKeysAppLog:(NSString *)appLog {}`，`- (void)foo:(NSString *)str {}`>`- (void)foo:(NSString *)str appLog:(NSString *)appLog {}`
 - **-ignoreDirNames [忽略文件夹名称字符串]** 忽略这些文件夹，对`-modifyClassNamePrefix`和`-spamCodeOut`参数有效。目前只会忽略`源码文件夹绝对路径`下一级的这些目录。如：`/p/s -ignoreDirNames categorys`，那么`/p/s/categorys`会被忽略，但`/p/s/viewControllers/categorys`不会忽略。
