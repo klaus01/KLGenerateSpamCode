@@ -468,7 +468,12 @@ void generateSwiftSpamCodeFile(NSString *outDirectory, NSString *swiftFilePath) 
             if (oldParameterName.length > 0) {
                 oldParameterName = [@", " stringByAppendingString:oldParameterName];
             }
-            [methodsString appendFormat:kSwiftMethodTemplate, funcName, gOutParameterName.capitalizedString, gOutParameterName, oldParameterName, gOutParameterName];
+            if (![funcName containsString:@"<"] && ![funcName containsString:@">"]) {
+                funcName = [NSString stringWithFormat:@"%@%@", funcName, randomString(5)];
+                [methodsString appendFormat:kSwiftMethodTemplate, funcName, gOutParameterName.capitalizedString, gOutParameterName, oldParameterName, gOutParameterName];
+            } else {
+                NSLog(@"string contains `[` or `]` bla! funcName: %@", funcName);
+            }
         }];
         if (methodsString.length <= 0) return;
         
