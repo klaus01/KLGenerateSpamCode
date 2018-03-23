@@ -21,7 +21,7 @@ typedef NS_ENUM(NSInteger, GSCSourceType) {
 };
 
 void recursiveDirectory(NSString *directory, NSArray<NSString *> *ignoreDirNames, void(^handleMFile)(NSString *mFilePath), void(^handleSwiftFile)(NSString *swiftFilePath));
-void generateSpamCodeFile(NSString *outDirectory, NSString *mFilePath, GSCSourceType type, NSMutableString *importString, NSMutableString *callFuncString);
+void generateSpamCodeFile(NSString *outDirectory, NSString *mFilePath, GSCSourceType type, NSMutableString *categoryCallImportString, NSMutableString *categoryCallFuncString, NSMutableString *newClassCallImportString, NSMutableString *newClassCallFuncString);
 void generateSwiftSpamCodeFile(NSString *outDirectory, NSString *swiftFilePath);
 NSString *randomString(NSInteger length);
 void handleXcassetsFiles(NSString *directory);
@@ -30,7 +30,10 @@ void modifyProjectName(NSString *projectDir, NSString *oldName, NSString *newNam
 void modifyClassNamePrefix(NSMutableString *projectContent, NSString *sourceCodeDir, NSArray<NSString *> *ignoreDirNames, NSString *oldName, NSString *newName);
 
 NSString *gOutParameterName = nil;
+NSString *gSpamCodeFuncationCallName = nil;
+NSString *gNewClassFuncationCallName = nil;
 NSString *gSourceCodeDir = nil;
+static NSString * const kNewClassDirName = @"NewClass";
 
 #pragma mark - 公共方法
 
@@ -41,6 +44,10 @@ NSString *randomString(NSInteger length) {
         [ret appendFormat:@"%C", [kRandomAlphabet characterAtIndex:arc4random_uniform((uint32_t)[kRandomAlphabet length])]];
     }
     return ret;
+}
+
+NSString *randomLetter() {
+    return [NSString stringWithFormat:@"%C", [kRandomAlphabet characterAtIndex:arc4random_uniform(52)]];
 }
 
 NSRange getOutermostCurlyBraceRange(NSString *string, unichar beginChar, unichar endChar, NSInteger beginIndex) {
@@ -206,6 +213,20 @@ int main(int argc, const char * argv[]) {
                     }
                 }
                 
+                NSString *newClassOutDirString = [outDirString stringByAppendingPathComponent:kNewClassDirName];
+                if ([fm fileExistsAtPath:newClassOutDirString isDirectory:&isDirectory]) {
+                    if (!isDirectory) {
+                        printf("%s 已存在但不是文件夹\n", [newClassOutDirString UTF8String]);
+                        return 1;
+                    }
+                } else {
+                    NSError *error = nil;
+                    if (![fm createDirectoryAtPath:newClassOutDirString withIntermediateDirectories:YES attributes:nil error:&error]) {
+                        printf("创建输出目录 %s 失败", [newClassOutDirString UTF8String]);
+                        return 1;
+                    }
+                }
+                
                 i++;
                 if (i < arguments.count) {
                     gOutParameterName = arguments[i];
@@ -219,6 +240,31 @@ int main(int argc, const char * argv[]) {
                     return 1;
                 }
                 
+                i++;
+                if (i < arguments.count) {
+                    gSpamCodeFuncationCallName = arguments[i];
+                    NSRegularExpression *regex = [NSRegularExpression regularExpressionWithPattern:@"[a-zA-Z]+" options:0 error:nil];
+                    if ([regex numberOfMatchesInString:gSpamCodeFuncationCallName options:0 range:NSMakeRange(0, gSpamCodeFuncationCallName.length)] <= 0) {
+                        printf("缺少垃圾代码函数调用名，或参数名\"%s\"不合法(需要字母开头)\n", [gSpamCodeFuncationCallName UTF8String]);
+                        return 1;
+                    }
+                } else {
+                    printf("缺少垃圾代码函数调用名\n");
+                    return 1;
+                }
+                
+                i++;
+                if (i < arguments.count) {
+                    gNewClassFuncationCallName = arguments[i];
+                    NSRegularExpression *regex = [NSRegularExpression regularExpressionWithPattern:@"[a-zA-Z]+" options:0 error:nil];
+                    if ([regex numberOfMatchesInString:gNewClassFuncationCallName options:0 range:NSMakeRange(0, gNewClassFuncationCallName.length)] <= 0) {
+                        printf("缺少 NewClass 代码函数调用名，或参数名\"%s\"不合法(需要字母开头)\n", [gNewClassFuncationCallName UTF8String]);
+                        return 1;
+                    }
+                } else {
+                    printf("缺少 NewClass 代码函数调用名\n");
+                    return 1;
+                }
                 continue;
             }
             if ([argument isEqualToString:@"-ignoreDirNames"]) {
@@ -264,13 +310,15 @@ int main(int argc, const char * argv[]) {
             printf("修改类名前缀完成\n");
         }
         if (outDirString) {
-            NSMutableString *importString = [NSMutableString string];
-            NSMutableString *callFuncString = [NSMutableString string];
+            NSMutableString *categoryCallImportString = [NSMutableString string];
+            NSMutableString *categoryCallFuncString = [NSMutableString string];
+            NSMutableString *newClassCallImportString = [NSMutableString string];
+            NSMutableString *newClassCallFuncString = [NSMutableString string];
             
             recursiveDirectory(gSourceCodeDir, ignoreDirNames, ^(NSString *mFilePath) {
                 @autoreleasepool {
-                    generateSpamCodeFile(outDirString, mFilePath, GSCSourceTypeClass, importString, callFuncString);
-                    generateSpamCodeFile(outDirString, mFilePath, GSCSourceTypeCategory, importString, callFuncString);
+                    generateSpamCodeFile(outDirString, mFilePath, GSCSourceTypeClass, categoryCallImportString, categoryCallFuncString, newClassCallImportString, newClassCallFuncString);
+                    generateSpamCodeFile(outDirString, mFilePath, GSCSourceTypeCategory, categoryCallImportString, categoryCallFuncString, newClassCallImportString, newClassCallFuncString);
                 }
             }, ^(NSString *swiftFilePath) {
                 @autoreleasepool {
@@ -279,8 +327,13 @@ int main(int argc, const char * argv[]) {
             });
             
             NSString *fileName = [gOutParameterName stringByAppendingString:@"CallHeader.h"];
-            NSString *fileContent = [NSString stringWithFormat:@"%@\n%@return ret;\n}", importString, callFuncString];
+            NSString *fileContent = [NSString stringWithFormat:@"%@\n%@return ret;\n}", categoryCallImportString, categoryCallFuncString];
             [fileContent writeToFile:[outDirString stringByAppendingPathComponent:fileName] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+            
+            fileName = [kNewClassDirName stringByAppendingString:@"CallHeader.h"];
+            fileContent = [NSString stringWithFormat:@"%@\n%@return ret;\n}", newClassCallImportString, newClassCallFuncString];
+            [fileContent writeToFile:[[outDirString stringByAppendingPathComponent:kNewClassDirName] stringByAppendingPathComponent:fileName] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+            
             printf("生成垃圾代码完成\n");
         }
     }
@@ -347,7 +400,17 @@ static NSString *const kMClassFileTemplate = @"\
 @implementation %@ (%@)\n\
 %@\n\
 @end\n";
-void generateSpamCodeFile(NSString *outDirectory, NSString *mFilePath, GSCSourceType type, NSMutableString *importString, NSMutableString *callFuncString) {
+static NSString *const kHNewClassFileTemplate = @"\
+#import <Foundation/Foundation.h>\n\
+@interface %@: NSObject\n\
+%@\n\
+@end\n";
+static NSString *const kMNewClassFileTemplate = @"\
+#import \"%@.h\"\n\
+@implementation %@\n\
+%@\n\
+@end\n";
+void generateSpamCodeFile(NSString *outDirectory, NSString *mFilePath, GSCSourceType type, NSMutableString *categoryCallImportString, NSMutableString *categoryCallFuncString, NSMutableString *newClassCallImportString, NSMutableString *newClassCallFuncString) {
     NSString *mFileContent = [NSString stringWithContentsOfFile:mFilePath encoding:NSUTF8StringEncoding error:nil];
     NSString *regexStr;
     switch (type) {
@@ -372,6 +435,7 @@ void generateSpamCodeFile(NSString *outDirectory, NSString *mFilePath, GSCSource
     [matches enumerateObjectsUsingBlock:^(NSTextCheckingResult * _Nonnull impResult, NSUInteger idx, BOOL * _Nonnull stop) {
         NSString *className = [mFileContent substringWithRange:[impResult rangeAtIndex:1]];
         NSString *categoryName = nil;
+        NSString *newClassName = [NSString stringWithFormat:@"%@%@%@", gOutParameterName, className, randomLetter()];
         if (impResult.numberOfRanges >= 3) {
             categoryName = [mFileContent substringWithRange:[impResult rangeAtIndex:2]];
         }
@@ -391,30 +455,44 @@ void generateSpamCodeFile(NSString *outDirectory, NSString *mFilePath, GSCSource
         NSArray<NSTextCheckingResult *> *matches = [expression matchesInString:implementation options:0 range:NSMakeRange(0, implementation.length)];
         if (matches.count <= 0) return;
         
+        // 新类 h m 垃圾文件内容
+        NSMutableString *hNewClassFileMethodsString = [NSMutableString string];
+        NSMutableString *mNewClassFileMethodsString = [NSMutableString string];
+        
         // 生成 h m 垃圾文件内容
         NSMutableString *hFileMethodsString = [NSMutableString string];
         NSMutableString *mFileMethodsString = [NSMutableString string];
         [matches enumerateObjectsUsingBlock:^(NSTextCheckingResult * _Nonnull matche, NSUInteger idx, BOOL * _Nonnull stop) {
             NSString *symbol = @"+";//[implementation substringWithRange:[matche rangeAtIndex:1]];
             NSString *methodName = [[implementation substringWithRange:[matche rangeAtIndex:2]] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+            NSString *newClassMethodName = nil;
             NSString *methodCallName = nil;
+            NSString *newClassMethodCallName = nil;
             if ([methodName containsString:@":"]) {
                 // 去掉参数，生成无参数的新名称
                 NSRegularExpression *expression = [NSRegularExpression regularExpressionWithPattern:@"\\b([\\w]+) *:" options:0 error:nil];
                 NSArray<NSTextCheckingResult *> *matches = [expression matchesInString:methodName options:0 range:NSMakeRange(0, methodName.length)];
                 if (matches.count > 0) {
                     NSMutableString *newMethodName = [NSMutableString string];
+                    NSMutableString *newClassNewMethodName = [NSMutableString string];
                     [matches enumerateObjectsUsingBlock:^(NSTextCheckingResult * _Nonnull matche, NSUInteger idx, BOOL * _Nonnull stop) {
                         NSString *str = [methodName substringWithRange:[matche rangeAtIndex:1]];
                         [newMethodName appendString:(newMethodName.length > 0 ? str.capitalizedString : str)];
+                        [newClassNewMethodName appendFormat:@"%@%@", randomLetter(), str.capitalizedString];
                     }];
                     methodCallName = [NSString stringWithFormat:@"%@%@", newMethodName, gOutParameterName.capitalizedString];
                     [newMethodName appendFormat:@"%@:(NSInteger)%@", gOutParameterName.capitalizedString, gOutParameterName];
                     methodName = newMethodName;
+                    
+                    newClassMethodCallName = [NSString stringWithFormat:@"%@", newClassNewMethodName];
+                    newClassMethodName = [NSString stringWithFormat:@"%@:(NSInteger)%@", newClassMethodCallName, gOutParameterName];
                 } else {
                     methodName = [methodName stringByAppendingFormat:@" %@:(NSInteger)%@", gOutParameterName, gOutParameterName];
                 }
             } else {
+                newClassMethodCallName = [NSString stringWithFormat:@"%@%@", randomLetter(), methodName];
+                newClassMethodName = [NSString stringWithFormat:@"%@:(NSInteger)%@", newClassMethodCallName, gOutParameterName];
+                
                 methodCallName = [NSString stringWithFormat:@"%@%@", methodName, gOutParameterName.capitalizedString];
                 methodName = [methodName stringByAppendingFormat:@"%@:(NSInteger)%@", gOutParameterName.capitalizedString, gOutParameterName];
             }
@@ -425,11 +503,27 @@ void generateSpamCodeFile(NSString *outDirectory, NSString *mFilePath, GSCSource
             [mFileMethodsString appendFormat:@"    return %@ %% %u == 0;\n", gOutParameterName, arc4random_uniform(50) + 1];
             [mFileMethodsString appendString:@"}\n"];
             
-            if (callFuncString.length <= 0) {
-                [callFuncString appendFormat:@"static inline BOOL %@4Call3() {\nBOOL ret = NO;\n", gOutParameterName];
-            }
             if (methodCallName.length > 0) {
-                [callFuncString appendFormat:@"ret = ret && [%@ %@:%u];\n", className, methodCallName, arc4random_uniform(100)];
+                if (categoryCallFuncString.length <= 0) {
+                    [categoryCallFuncString appendFormat:@"static inline NSInteger %@() {\nNSInteger ret = 0;\n", gSpamCodeFuncationCallName];
+                }
+                [categoryCallFuncString appendFormat:@"ret += [%@ %@:%u] ? 1 : 0;\n", className, methodCallName, arc4random_uniform(100)];
+            }
+            
+            
+            if (newClassMethodName.length > 0) {
+                [hNewClassFileMethodsString appendFormat:@"%@ (BOOL)%@;\n", symbol, newClassMethodName];
+                
+                [mNewClassFileMethodsString appendFormat:@"%@ (BOOL)%@ {\n", symbol, newClassMethodName];
+                [mNewClassFileMethodsString appendFormat:@"    return %@ %% %u == 0;\n", gOutParameterName, arc4random_uniform(50) + 1];
+                [mNewClassFileMethodsString appendString:@"}\n"];
+            }
+            
+            if (newClassMethodCallName.length > 0) {
+                if (newClassCallFuncString.length <= 0) {
+                    [newClassCallFuncString appendFormat:@"static inline NSInteger %@() {\nNSInteger ret = 0;\n", gNewClassFuncationCallName];
+                }
+                [newClassCallFuncString appendFormat:@"ret += [%@ %@:%u] ? 1 : 0;\n", newClassName, newClassMethodCallName, arc4random_uniform(100)];
             }
         }];
         
@@ -443,15 +537,28 @@ void generateSpamCodeFile(NSString *outDirectory, NSString *mFilePath, GSCSource
                 break;
         }
         
-        NSString *fileName = [NSString stringWithFormat:@"%@+%@.h", className, newCategoryName];
-        NSString *fileContent = [NSString stringWithFormat:kHClassFileTemplate, fileImportStrings, className, newCategoryName, hFileMethodsString];
+        // category m
+        NSString *fileName = [NSString stringWithFormat:@"%@+%@.m", className, newCategoryName];
+        NSString *fileContent = [NSString stringWithFormat:kMClassFileTemplate, className, newCategoryName, className, newCategoryName, mFileMethodsString];
+        [fileContent writeToFile:[outDirectory stringByAppendingPathComponent:fileName] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+        // category h
+        fileName = [NSString stringWithFormat:@"%@+%@.h", className, newCategoryName];
+        fileContent = [NSString stringWithFormat:kHClassFileTemplate, fileImportStrings, className, newCategoryName, hFileMethodsString];
         [fileContent writeToFile:[outDirectory stringByAppendingPathComponent:fileName] atomically:YES encoding:NSUTF8StringEncoding error:nil];
         
-        fileName = [NSString stringWithFormat:@"%@+%@.m", className, newCategoryName];
-        fileContent = [NSString stringWithFormat:kMClassFileTemplate, className, newCategoryName, className, newCategoryName, mFileMethodsString];
-        [fileContent writeToFile:[outDirectory stringByAppendingPathComponent:fileName] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+        [categoryCallImportString appendFormat:@"#import \"%@\"\n", fileName];
         
-        [importString appendFormat:@"#import \"%@\"\n", fileName];
+        // new class m
+        NSString *newOutDirectory = [outDirectory stringByAppendingPathComponent:kNewClassDirName];
+        fileName = [NSString stringWithFormat:@"%@.m", newClassName];
+        fileContent = [NSString stringWithFormat:kMNewClassFileTemplate, newClassName, newClassName, mNewClassFileMethodsString];
+        [fileContent writeToFile:[newOutDirectory stringByAppendingPathComponent:fileName] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+        // new class h
+        fileName = [NSString stringWithFormat:@"%@.h", newClassName];
+        fileContent = [NSString stringWithFormat:kHNewClassFileTemplate, newClassName, hNewClassFileMethodsString];
+        [fileContent writeToFile:[newOutDirectory stringByAppendingPathComponent:fileName] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+        
+        [newClassCallImportString appendFormat:@"#import \"%@\"\n", fileName];
     }];
 }
 
@@ -590,7 +697,7 @@ void deleteComments(NSString *directory) {
             deleteComments(filePath);
             continue;
         }
-        if (![fileName hasSuffix:@".h"] && ![fileName hasSuffix:@".m"] && ![fileName hasSuffix:@".swift"]) continue;
+        if (![fileName hasSuffix:@".h"] && ![fileName hasSuffix:@".m"] && ![fileName hasSuffix:@".mm"] && ![fileName hasSuffix:@".swift"]) continue;
         NSMutableString *fileContent = [NSMutableString stringWithContentsOfFile:filePath encoding:NSUTF8StringEncoding error:nil];
         regularReplacement(fileContent, @"([^:/])//.*",             @"\\1");
         regularReplacement(fileContent, @"^//.*",                   @"");
