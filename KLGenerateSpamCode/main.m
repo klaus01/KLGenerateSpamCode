@@ -25,7 +25,7 @@ void generateSpamCodeFile(NSString *outDirectory, NSString *mFilePath, GSCSource
 void generateSwiftSpamCodeFile(NSString *outDirectory, NSString *swiftFilePath);
 NSString *randomString(NSInteger length);
 void handleXcassetsFiles(NSString *directory);
-void deleteComments(NSString *directory);
+void deleteComments(NSString *directory, NSArray<NSString *> *ignoreDirNames);
 void modifyProjectName(NSString *projectDir, NSString *oldName, NSString *newName);
 void modifyClassNamePrefix(NSMutableString *projectContent, NSString *sourceCodeDir, NSArray<NSString *> *ignoreDirNames, NSString *oldName, NSString *newName);
 
@@ -281,7 +281,7 @@ int main(int argc, const char * argv[]) {
         }
         if (needDeleteComments) {
             @autoreleasepool {
-                deleteComments(gSourceCodeDir);
+                deleteComments(gSourceCodeDir, ignoreDirNames);
             }
             printf("删除注释和空行完成\n");
         }
@@ -692,14 +692,15 @@ void handleXcassetsFiles(NSString *directory) {
 
 #pragma mark - 删除注释
 
-void deleteComments(NSString *directory) {
+void deleteComments(NSString *directory, NSArray<NSString *> *ignoreDirNames) {
     NSFileManager *fm = [NSFileManager defaultManager];
     NSArray<NSString *> *files = [fm contentsOfDirectoryAtPath:directory error:nil];
     BOOL isDirectory;
     for (NSString *fileName in files) {
+        if ([ignoreDirNames containsObject:fileName]) continue;
         NSString *filePath = [directory stringByAppendingPathComponent:fileName];
         if ([fm fileExistsAtPath:filePath isDirectory:&isDirectory] && isDirectory) {
-            deleteComments(filePath);
+            deleteComments(filePath, ignoreDirNames);
             continue;
         }
         if (![fileName hasSuffix:@".h"] && ![fileName hasSuffix:@".m"] && ![fileName hasSuffix:@".mm"] && ![fileName hasSuffix:@".swift"]) continue;
