@@ -248,9 +248,6 @@ int main(int argc, const char * argv[]) {
                         printf("缺少垃圾代码函数调用名，或参数名\"%s\"不合法(需要字母开头)\n", [gSpamCodeFuncationCallName UTF8String]);
                         return 1;
                     }
-                } else {
-                    printf("缺少垃圾代码函数调用名\n");
-                    return 1;
                 }
                 
                 i++;
@@ -261,9 +258,6 @@ int main(int argc, const char * argv[]) {
                         printf("缺少 NewClass 代码函数调用名，或参数名\"%s\"不合法(需要字母开头)\n", [gNewClassFuncationCallName UTF8String]);
                         return 1;
                     }
-                } else {
-                    printf("缺少 NewClass 代码函数调用名\n");
-                    return 1;
                 }
                 continue;
             }
@@ -504,7 +498,7 @@ void generateSpamCodeFile(NSString *outDirectory, NSString *mFilePath, GSCSource
             [mFileMethodsString appendString:@"}\n"];
             
             if (methodCallName.length > 0) {
-                if (categoryCallFuncString.length <= 0) {
+                if (gSpamCodeFuncationCallName && categoryCallFuncString.length <= 0) {
                     [categoryCallFuncString appendFormat:@"static inline NSInteger %@() {\nNSInteger ret = 0;\n", gSpamCodeFuncationCallName];
                 }
                 [categoryCallFuncString appendFormat:@"ret += [%@ %@:%u] ? 1 : 0;\n", className, methodCallName, arc4random_uniform(100)];
@@ -520,7 +514,7 @@ void generateSpamCodeFile(NSString *outDirectory, NSString *mFilePath, GSCSource
             }
             
             if (newClassMethodCallName.length > 0) {
-                if (newClassCallFuncString.length <= 0) {
+                if (gNewClassFuncationCallName && newClassCallFuncString.length <= 0) {
                     [newClassCallFuncString appendFormat:@"static inline NSInteger %@() {\nNSInteger ret = 0;\n", gNewClassFuncationCallName];
                 }
                 [newClassCallFuncString appendFormat:@"ret += [%@ %@:%u] ? 1 : 0;\n", newClassName, newClassMethodCallName, arc4random_uniform(100)];
