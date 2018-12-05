@@ -900,7 +900,15 @@ void modifyClassNamePrefix(NSMutableString *projectContent, NSString *sourceCode
         if ([fileName hasPrefix:oldName]) {
             newClassName = [newName stringByAppendingString:[fileName substringFromIndex:oldName.length]];
         } else {
-            newClassName = [newName stringByAppendingString:fileName];
+            //处理是category的情况。当是category时，修改+号后面的类名前缀
+            NSString *oldNamePlus = [NSString stringWithFormat:@"+%@",oldName];
+            if ([fileName containsString:oldNamePlus]) {
+                NSMutableString *fileNameStr = [[NSMutableString alloc] initWithString:fileName];
+                [fileNameStr replaceCharactersInRange:[fileName rangeOfString:oldNamePlus] withString:[NSString stringWithFormat:@"+%@",newName]];
+                newClassName = fileNameStr;
+            }else{
+                newClassName = [newName stringByAppendingString:fileName];
+            }
         }
         
         // 文件名 Const.ext > DDConst.ext
