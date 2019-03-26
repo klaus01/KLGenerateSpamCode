@@ -1,0 +1,55 @@
+KLGenerateSpamCode junk code generator
+This tool is used to respond to Apple's review of duplicate applications (Guideline 4.3 Design Spam) to avoid the probability of Apple machine detection.
+
+The main function
+Modify project name
+Modify the class name prefix
+Scan the code in the project to generate an equal number of Category files, and the same amount of garbage code in the file.
+Modify the png resource file name in the xxx.xcassets folder.
+Remove all comments and blank lines from the code.
+use
+Use source code
+Download the source code.
+Open the project with Xcode and configure the parameters. As shown
+
+
+run
+Execute GenerateSpamCode in the terminal using a binary file
+$ ./GenerateSpamCode \
+/Users/kelei/Documents/work/git/projectName/source \
+-deleteComments
+
+
+Parameter Description
+
+-(Required) Absolute path to the source folder (eg: /Users/kelei/Documents/work/git/projectName/source)
+
+-modifyProjectName [Original Name]>[New Name] Modify the project name. The program will modify the original name - Swift.h, Podfile, the original name - Bridging-Header.h, the absolute path of the source folder, the original name .xcodeproj and the name and content of the original name .xcworkspace. Podfile needs to be manually pop installed after being modified
+
+-modifyClassNamePrefix [project file xcodeproj absolute path] [original prefix]>[new prefix] Modify the source code class name prefix. The program will scan the .h .swift file in the absolute path of the source folder, modify the file name, modify the code using the class name, and modify the file name in the project file. If the file name has the original prefix, it will be modified into a new prefix. For example, the original prefix ViewController becomes the new prefix ViewController; if there is no original prefix, a new prefix will be added, such as: ViewController becomes the new prefix ViewController.
+
+-spamCodeOut [junk code file output directory] [parameter name added by junk code method] Generate garbage code. The program will scan the classes and methods in the .m .swift file in the absolute path of the source folder, and generate the category and extension files. The method in the file is to add the parameter name parameter added by the garbage code method based on the original code method. For example: -spamCodeOut /dir AppLog will generate - (void)setupKeys {} as + (BOOL)setupKeysAppLog:(NSInteger)AppLog { return AppLog % 20 == 0; }, will - (void)foo:(NSString *)str {} is generated as + (BOOL)fooAppLog:(NSInteger)AppLog { return AppLog % 23 == 0; }
+
+-ignoreDirNames [Ignore folder name strings] Ignore these folders, valid for the -modifyClassNamePrefix, -spamCodeOut, and -deleteComments parameters. Currently only these directories under the absolute path of the source folder are ignored. For example: /p/s -ignoreDirNames categorys, then /p/s/categorys will be ignored, but /p/s/viewControllers/categorys will not be ignored.
+
+-handleXcassets Modify the png resource file name in the xxx.xcassets folder, as well as the associated name in the Contents.json file, without affecting the use of images in the code.
+-deleteComments Deletes comments and blank lines in the .h .m .swift file in the project directory.
+
+
+Also modify the image hash value method
+Use ImageMagick to do light compression on png images without losing image quality, and change the image file hash value. method:
+
+Install ImageMagick, brew install imagemagick
+Compress all png files in the project directory, find . -iname "*.png" -exec echo {} \; -exec convert {} {} \;
+
+Experience
+As far as my submission in 2017-11 months is concerned, I only need to make the following changes to get on the vest.
+
+Modify project name
+Modify the class name prefix
+Modify image file Hash value
+Modify the image file name in .xcassets
+Packed with another computer
+Known issue
+The generated garbage code file may be a private class implemented in the .m file. The compiled garbage code may report an error, delete the garbage code .h .m file and can.
+
