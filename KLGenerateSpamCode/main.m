@@ -279,13 +279,7 @@ int main(int argc, const char * argv[]) {
             }
             printf("删除注释和空行完成\n");
         }
-        if (oldProjectName && newProjectName) {
-            @autoreleasepool {
-                NSString *dir = gSourceCodeDir.stringByDeletingLastPathComponent;
-                modifyProjectName(dir, oldProjectName, newProjectName);
-            }
-            printf("修改工程名完成\n");
-        }
+        
         if (oldClassNamePrefix && newClassNamePrefix) {
             printf("开始修改类名前缀...\n");
             @autoreleasepool {
@@ -302,6 +296,14 @@ int main(int argc, const char * argv[]) {
                 [projectContent writeToFile:projectFilePath atomically:YES encoding:NSUTF8StringEncoding error:nil];
             }
             printf("修改类名前缀完成\n");
+        }
+        
+        if (oldProjectName && newProjectName) {
+            @autoreleasepool {
+                NSString *dir = gSourceCodeDir.stringByDeletingLastPathComponent;
+                modifyProjectName(dir, oldProjectName, newProjectName);
+            }
+            printf("修改工程名完成\n");
         }
         if (outDirString) {
             NSMutableString *categoryCallImportString = [NSMutableString string];
@@ -442,7 +444,7 @@ void generateSpamCodeFile(NSString *outDirectory, NSString *mFilePath, GSCSource
                 return;
             }
         }
-
+        
         // 查找方法
         NSString *implementation = [mFileContent substringWithRange:impResult.range];
         NSRegularExpression *expression = [NSRegularExpression regularExpressionWithPattern:@"^ *([-+])[^)]+\\)([^;{]+)" options:NSRegularExpressionAnchorsMatchLines|NSRegularExpressionUseUnicodeWordBoundaries error:nil];
@@ -561,9 +563,9 @@ static NSString *const kSwiftFileTemplate = @"\
 extension %@ {\n%@\
 }\n";
 static NSString *const kSwiftMethodTemplate = @"\
-    func %@%@(_ %@: String%@) {\n\
-        print(%@)\n\
-    }\n";
+func %@%@(_ %@: String%@) {\n\
+print(%@)\n\
+}\n";
 void generateSwiftSpamCodeFile(NSString *outDirectory, NSString *swiftFilePath) {
     NSString *swiftFileContent = [NSString stringWithContentsOfFile:swiftFilePath encoding:NSUTF8StringEncoding error:nil];
     
